@@ -14,6 +14,7 @@ export default async function AdminGalleryPage({
   params,
 }: AdminGalleryPageProps) {
   const { event_code, secret } = await params;
+
   const ADMIN_SECRET = "rapoleondanhaura";
 
   if (secret !== ADMIN_SECRET) {
@@ -22,7 +23,6 @@ export default async function AdminGalleryPage({
 
   const supabase = createSupabaseServer();
 
-  // ambil data event berdasarkan event_code
   const { data: event, error: eventError } = await supabase
     .from("events")
     .select("id, event_code, bride_name, groom_name")
@@ -30,18 +30,9 @@ export default async function AdminGalleryPage({
     .single();
 
   if (eventError || !event) {
-    return (
-      <main className="p-10">
-        <h1 className="text-2xl font-bold">EVENT TIDAK DITEMUKAN</h1>
-
-        <pre className="mt-5 whitespace-pre-wrap">
-          {JSON.stringify(eventError, null, 2)}
-        </pre>
-      </main>
-    );
+    notFound();
   }
 
-  // Ambil semua foto untuk event tersebut
   const photos = await getGalleryPhotos(event.id);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -50,7 +41,6 @@ export default async function AdminGalleryPage({
     throw new Error("NEXT_PUBLIC_SUPABASE_URL belum tersedia.");
   }
 
-  // Kelompokkan foto berdasarkan nama tamu
   const groupedPhotos = photos.reduce(
     (groups, photo) => {
       if (!groups[photo.guest_name]) {
@@ -58,7 +48,6 @@ export default async function AdminGalleryPage({
       }
 
       groups[photo.guest_name].push(photo);
-
       return groups;
     },
     {} as Record<string, typeof photos>,
@@ -67,7 +56,6 @@ export default async function AdminGalleryPage({
   return (
     <main className="min-h-screen bg-[#fdfcf9] px-5 py-10 text-[#292929] sm:px-8">
       <div className="mx-auto max-w-7xl">
-        {/* Header */}
         <header className="mb-10 text-center">
           <p className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-[#b4935b]">
             Wedding Gallery
@@ -88,7 +76,6 @@ export default async function AdminGalleryPage({
           )}
         </header>
 
-        {/* Empty state */}
         {photos.length === 0 ? (
           <div className="rounded-3xl border border-gray-200 bg-white p-12 text-center shadow-sm">
             <p className="text-gray-500">Belum ada foto dari tamu.</p>
@@ -97,7 +84,6 @@ export default async function AdminGalleryPage({
           <div className="space-y-12">
             {Object.entries(groupedPhotos).map(([guestName, guestPhotos]) => (
               <section key={guestName}>
-                {/* Guest Header */}
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-medium">{guestName}</h2>
@@ -112,10 +98,11 @@ export default async function AdminGalleryPage({
                   </span>
                 </div>
 
-                {/* Photo Grid */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {guestPhotos.map((photo) => {
-                    const imageUrl = `${supabaseUrl}/storage/v1/object/public/wedding-photos/${photo.file_path}`;
+                    const imageUrl =
+                      `${supabaseUrl}/storage/v1/object/public/` +
+                      `wedding-photos/${photo.file_path}`;
 
                     return (
                       <div
