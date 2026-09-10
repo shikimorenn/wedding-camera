@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePhotoQuota } from "../session-actions";
+import { getSessionPhotos } from "../session-actions";
 
 interface CameraProps {
   sessionId: string;
+  eventId: string;
   photoUsed: number;
   photoLimit: number;
 }
 
 export default function Camera({
   sessionId,
+  eventId,
   photoUsed: initialPhotoUsed,
   photoLimit,
 }: CameraProps) {
@@ -24,7 +26,9 @@ export default function Camera({
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
 
   // Foto terakhir yang sudah dipilih Use Photo
-  const [lastPhoto, setLastPhoto] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [showPhotoRoll, setShowPhotoRoll] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Animasi counter
   const [isCountingDown, setIsCountingDown] = useState(false);
@@ -38,6 +42,40 @@ export default function Camera({
   const [facingMode, setFacingMode] = useState<"user" | "environment">(
     "environment",
   );
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadPhotos() {
+      try {
+        const data = await getSessionPhotos(sessionId);
+
+        if (!mounted) {
+          return;
+        }
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+        if (!supabaseUrl) {
+          return;
+        }
+
+        const photoUrls = data.map((photo) => {
+          return `${supabaseUrl}/storage/v1/object/public/wedding-photos/${photo.file_path}`;
+        });
+
+        setPhotos(photoUrls);
+      } catch (error) {
+        console.error("Failed to load photos:", error);
+      }
+    }
+
+    loadPhotos();
+
+    return () => {
+      mounted = false;
+    };
+  }, [sessionId]);
 
   useEffect(() => {
     let mounted = true;
@@ -102,7 +140,7 @@ export default function Camera({
   }, [facingMode]);
 
   // CAPTURE
-  const handleCapture = () => {
+  const handleCapture = async () => {
     if (photoUsed >= photoLimit) {
       return;
     }
@@ -113,10 +151,27 @@ export default function Camera({
 
     const video = videoRef.current;
 
+    if (!video.videoWidth || !video.videoHeight) {
+      return;
+    }
+
+    const maxSize = 1600;
+
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+
+    if (width > height && width > maxSize) {
+      height = Math.round((height / width) * maxSize);
+      width = maxSize;
+    } else if (height > maxSize) {
+      width = Math.round((width / height) * maxSize);
+      height = maxSize;
+    }
+
     const canvas = document.createElement("canvas");
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = width;
+    canvas.height = height;
 
     const context = canvas.getContext("2d");
 
@@ -124,12 +179,25 @@ export default function Camera({
       return;
     }
 
-    // Jangan melakukan transform/mirror
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    context.drawImage(video, 0, 0, width, height);
 
-    const imageData = canvas.toDataURL("image/jpeg", 0.9);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          return;
+        }
 
-    setCapturedPhoto(imageData);
+        const webpBlob = new Blob([blob], {
+          type: "image/webp",
+        });
+
+        const imageUrl = URL.createObjectURL(webpBlob);
+
+        setCapturedPhoto(imageUrl);
+      },
+      "image/webp",
+      0.8,
+    );
   };
 
   // RETAKE
@@ -142,18 +210,72 @@ export default function Camera({
     }
   };
 
-  // USE PHOTO
+  // USE PHOTO masih test
   const handleUsePhoto = async () => {
-    if (!capturedPhoto) {
+    if (!capturedPhoto || isUploading) {
       return;
     }
 
     try {
-      const result = await usePhotoQuota(sessionId);
+      setIsUploading(true);
+
+      /*
+       * Convert data URL menjadi Blob
+       */
+
+      const imageResponse = await fetch(capturedPhoto);
+
+      const imageBlob = await imageResponse.blob();
+
+      const webpBlob = new Blob([imageBlob], {
+        type: "image/webp",
+      });
+
+      const formData = new FormData();
+
+      formData.append("file", webpBlob, "photo.webp");
+
+      formData.append("sessionId", sessionId);
+
+      formData.append("eventId", eventId);
+
+      /*
+       * Kirim ke API
+       */
+
+      const response = await fetch("/api/photos/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Gagal menyimpan foto.");
+      }
+
+      /*
+       * Update jumlah foto
+       */
 
       setPhotoUsed(result.photoUsed);
-      setLastPhoto(capturedPhoto);
+
+      /*
+       * Masukkan foto yang baru disimpan
+       * ke Photo Roll
+       */
+
+      setPhotos((prev) => [...prev, result.photo.url]);
+
+      /*
+       * Tutup preview
+       */
+
       setCapturedPhoto(null);
+
+      /*
+       * Animasi counter
+       */
 
       setIsCountingDown(true);
 
@@ -161,7 +283,11 @@ export default function Camera({
         setIsCountingDown(false);
       }, 350);
     } catch (error) {
-      console.error("Failed to use photo:", error);
+      console.error("Failed to save photo:", error);
+
+      alert(error instanceof Error ? error.message : "Gagal menyimpan foto.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -279,9 +405,10 @@ export default function Camera({
             <button
               type="button"
               onClick={handleUsePhoto}
-              className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition active:scale-95"
+              disabled={isUploading}
+              className="rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition active:scale-95 disabled:opacity-50"
             >
-              Use Photo
+              {isUploading ? "Saving..." : "Use Photo"}
             </button>
           </div>
         ) : (
@@ -337,10 +464,15 @@ export default function Camera({
             {/* SWITCH CAMERA */}
 
             {/* LAST PHOTO */}
-            <div className="h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-white/10">
-              {lastPhoto ? (
+            <button
+              type="button"
+              onClick={() => setShowPhotoRoll(true)}
+              aria-label="View photos"
+              className="h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-white/10 transition active:scale-95"
+            >
+              {photos.length > 0 ? (
                 <img
-                  src={lastPhoto}
+                  src={photos[photos.length - 1]}
                   alt="Last captured photo"
                   className="h-full w-full object-cover"
                 />
@@ -349,7 +481,7 @@ export default function Camera({
                   <span className="text-xs text-white/30">—</span>
                 </div>
               )}
-            </div>
+            </button>
           </div>
         )}
 
@@ -360,6 +492,43 @@ export default function Camera({
               ? `${remainingPhotos} photos remaining`
               : "No photos remaining"}
           </p>
+        )}
+        {showPhotoRoll && (
+          <div className="fixed inset-0 z-50 bg-black/95">
+            <div className="flex h-full flex-col">
+              <header className="flex h-16 items-center justify-between px-5">
+                <h2 className="text-base font-medium text-white">
+                  Your Photos
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPhotoRoll(false)}
+                  className="flex h-10 w-10 items-center justify-center text-2xl text-white/80"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div className="flex-1 overflow-y-auto px-4 pb-6">
+                <div className="grid grid-cols-2 gap-3">
+                  {photos.map((photo, index) => (
+                    <div
+                      key={index}
+                      className="aspect-[3/4] overflow-hidden rounded-2xl"
+                    >
+                      <img
+                        src={photo}
+                        alt={`Photo ${index + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </main>

@@ -42,6 +42,7 @@ export default async function CameraPage({
   return (
     <Camera
       sessionId={session.id}
+      eventId={session.event_id}
       photoUsed={session.photo_used}
       photoLimit={session.photo_limit}
     />
