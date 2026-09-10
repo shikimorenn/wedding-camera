@@ -1,4 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { getGalleryPhotos, GalleryPhoto } from "@/lib/services/galery.service";
 
 interface AdminTestPageProps {
   params: Promise<{
@@ -14,11 +15,32 @@ export default async function AdminTestPage({ params }: AdminTestPageProps) {
 
   const supabase = createSupabaseServer();
 
-  const { data: event, error } = await supabase
+  const { data: event } = await supabase
     .from("events")
     .select("id, event_code, bride_name, groom_name")
     .eq("event_code", event_code)
     .single();
+
+  if (!event) {
+    return (
+      <main style={{ padding: 40, fontFamily: "Arial" }}>
+        <h1>EVENT TIDAK DITEMUKAN</h1>
+
+        <p>
+          <strong>Event Code:</strong> {event_code}
+        </p>
+      </main>
+    );
+  }
+
+  let photos: GalleryPhoto[] = [];
+  let galleryError: string | null = null;
+
+  try {
+    photos = await getGalleryPhotos(event.id);
+  } catch (error: unknown) {
+    galleryError = error instanceof Error ? error.message : String(error);
+  }
 
   return (
     <main
@@ -28,14 +50,10 @@ export default async function AdminTestPage({ params }: AdminTestPageProps) {
         lineHeight: 1.8,
       }}
     >
-      <h1>ADMIN STEP 2 TEST</h1>
+      <h1>ADMIN STEP 3 TEST</h1>
 
       <p>
         <strong>Event Code:</strong> {event_code}
-      </p>
-
-      <p>
-        <strong>Secret:</strong> {secret}
       </p>
 
       <p>
@@ -45,24 +63,39 @@ export default async function AdminTestPage({ params }: AdminTestPageProps) {
       <hr />
 
       <p>
-        <strong>Event ditemukan:</strong> {event ? "YES" : "NO"}
+        <strong>Event:</strong> {event.bride_name} & {event.groom_name}
       </p>
 
       <p>
-        <strong>Event ID:</strong> {event?.id ?? "-"}
+        <strong>Event ID:</strong> {event.id}
       </p>
 
       <p>
-        <strong>Bride:</strong> {event?.bride_name ?? "-"}
+        <strong>Jumlah Foto:</strong> {photos.length}
       </p>
 
       <p>
-        <strong>Groom:</strong> {event?.groom_name ?? "-"}
+        <strong>Gallery Error:</strong> {galleryError ?? "Tidak ada error"}
       </p>
 
-      <p>
-        <strong>Supabase Error:</strong> {error?.message ?? "Tidak ada error"}
-      </p>
+      <hr />
+
+      <h2>Data Foto</h2>
+
+      {photos.length === 0 ? (
+        <p>Tidak ada foto.</p>
+      ) : (
+        <pre
+          style={{
+            whiteSpace: "pre-wrap",
+            background: "#f5f5f5",
+            padding: 20,
+            borderRadius: 10,
+          }}
+        >
+          {JSON.stringify(photos, null, 2)}
+        </pre>
+      )}
     </main>
   );
 }
