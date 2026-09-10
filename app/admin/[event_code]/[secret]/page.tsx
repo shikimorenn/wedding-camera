@@ -30,7 +30,15 @@ export default async function AdminGalleryPage({
     .single();
 
   if (eventError || !event) {
-    notFound();
+    return (
+      <main className="p-10">
+        <h1 className="text-2xl font-bold">EVENT TIDAK DITEMUKAN</h1>
+
+        <pre className="mt-5 whitespace-pre-wrap">
+          {JSON.stringify(eventError, null, 2)}
+        </pre>
+      </main>
+    );
   }
 
   // Ambil semua foto untuk event tersebut
