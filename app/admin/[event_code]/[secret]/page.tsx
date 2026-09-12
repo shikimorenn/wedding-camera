@@ -72,15 +72,15 @@ export default async function AdminGalleryPage({
   );
 
   return (
-    <main className="min-h-screen bg-[#fdfcf9] px-5 py-10 text-[#292929] sm:px-8">
+    <main className="min-h-screen bg-white/90 px-5 py-10 text-[#292929] sm:px-8">
       <div className="mx-auto max-w-7xl">
         <header className="mb-10 text-center">
-          <p className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-[#b4935b]">
+          <p className="mb-3 text-xs font-medium uppercase tracking-[0.3em] text-black">
             Wedding Gallery
           </p>
 
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            {event.bride_name} & {event.groom_name}
+            {event.groom_name} & {event.bride_name}
           </h1>
 
           <p className="mt-3 text-sm text-gray-500">

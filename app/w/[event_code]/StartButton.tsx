@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { getDeviceId } from "@/lib/utils/device";
 import { startWeddingSession } from "./action";
 
@@ -16,11 +17,14 @@ export default function StartButton({
   guestName,
 }: StartButtonProps) {
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleStart = async () => {
-    if (!guestName.trim()) return;
+    if (!guestName.trim() || isLoading) return;
 
     try {
+      setIsLoading(true);
+
       const deviceId = getDeviceId();
 
       const result = await startWeddingSession(
@@ -32,6 +36,8 @@ export default function StartButton({
       router.push(`/w/${eventCode}/camera?session=${result.sessionId}`);
     } catch (error) {
       console.error("Failed to start session:", error);
+
+      setIsLoading(false);
     }
   };
 
@@ -39,10 +45,10 @@ export default function StartButton({
     <button
       type="button"
       onClick={handleStart}
-      disabled={!guestName.trim()}
+      disabled={!guestName.trim() || isLoading}
       className="mt-8 flex justify-center rounded-full px-6 py-3 w-full bg-white text-black shadow-sm transition-all duration-300 hover:bg-white/80 disabled:cursor-not-allowed disabled:bg-gray-400/40 disabled:text-white/60"
     >
-      Mulai Ambil Foto
+      {isLoading ? "Menyiapkan kamera..." : "Mulai Ambil Foto"}
     </button>
   );
 }
